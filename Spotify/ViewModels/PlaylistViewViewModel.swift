@@ -8,6 +8,7 @@
 import Foundation
 protocol PlaylistViewViewModelOutput: AnyObject {
     func updateUI()
+    func updateUIAfterRemoveTrackFromPlaylist(indexPath: Int)
 }
 class PlaylistViewViewModel {
     let playlist: Playlist
@@ -38,5 +39,14 @@ class PlaylistViewViewModel {
         }
     }
     
+    func removeTrackFromplaylist(track:AudioTrack, playlist: Playlist,indexpath: Int) {
+        APICaller.shared.removeTrackFromPlaylist(track: track, playlist: playlist) { success in
+            if success {
+                self.delegate?.updateUIAfterRemoveTrackFromPlaylist(indexPath: indexpath)
+            } else {
+                print("Failed to remove track from playlists")
+            }
+        }
+    }
     
 }

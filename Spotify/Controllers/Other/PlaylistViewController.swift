@@ -10,6 +10,7 @@ import UIKit
 class PlaylistViewController: UIViewController {
     // MARK: - Properties
     private let playlist: Playlist
+    public var isOwner = false 
     let viewModel:PlaylistViewViewModel
     private let collectionView = UICollectionView(
         frame: .zero,
@@ -54,6 +55,7 @@ class PlaylistViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         configureUI()
+        configureGesture()
         fetchData()
     }
     
@@ -77,6 +79,11 @@ class PlaylistViewController: UIViewController {
         navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .action, target: self, action: #selector(didTapShare))
     }
     
+    private func configureGesture() {
+        let gestrue = UILongPressGestureRecognizer(target: self, action: #selector(didLongPress(_:)))
+        collectionView.addGestureRecognizer(gestrue)
+    }
+    
     private func fetchData() {
         viewModel.fetchData()
     }
@@ -88,6 +95,31 @@ class PlaylistViewController: UIViewController {
         let vc = UIActivityViewController(activityItems: [url], applicationActivities: [])
         vc.popoverPresentationController?.barButtonItem = navigationItem.rightBarButtonItem
         present(vc, animated: true)
+    }
+    
+    @objc private func didLongPress(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began else {
+            return
+        }
+        
+        let touchPoint = gesture.location(in: collectionView)
+        guard let indexpath = collectionView.indexPathForItem(at: touchPoint) else {
+            return
+        }
+        
+        let trackDelete = viewModel.tracks[indexpath.row]
+        print("DEBUG: check delete track name: \(trackDelete.name)")
+        
+        let actionSheet = UIAlertController(title: trackDelete.name, message: "Would you like to remove this from playlist? ", preferredStyle: .actionSheet)
+        actionSheet.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        actionSheet.addAction(UIAlertAction(title: "Remove", style: .destructive, handler: { [weak self] _ in
+            guard let self = self else { return }
+            self.viewModel.removeTrackFromplaylist(track: trackDelete, playlist: self.viewModel.playlist, indexpath: indexpath.row)
+            
+        }))
+        
+        present(actionSheet, animated: true, completion: nil)
+        
     }
     
 }
@@ -135,6 +167,8 @@ extension PlaylistViewController: UICollectionViewDelegate, UICollectionViewData
         let track = viewModel.tracks[index]
         PlaybackPresenter.shared.startPlayback(from: self, track: track)
     }
+    
+    
 }
 
 
@@ -148,7 +182,16 @@ extension PlaylistViewController:PlaylistHeaderCollectionReusableViewDelegate {
 
 
 extension PlaylistViewController: PlaylistViewViewModelOutput {
+    func updateUIAfterRemoveTrackFromPlaylist(indexPath: Int) {
+        DispatchQueue.main.async {
+            self.viewModel.tracks.remove(at: indexPath)
+            self.viewModel.recommendedTrackCellViewModels.remove(at: indexPath)
+            self.collectionView.reloadData()
+        }
+    }
+    
     func updateUI() {
         collectionView.reloadData()
     }
+    
 }

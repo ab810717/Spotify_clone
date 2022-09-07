@@ -74,7 +74,7 @@ class HomeViewController: UIViewController {
         navigationController?.pushViewController(vc, animated: true)
     }
     
-    @objc func didLongPress(_ gesture: UILongPressGestureRecognizer) {
+    @objc private func didLongPress(_ gesture: UILongPressGestureRecognizer) {
         guard gesture.state == .began else {
             return
         }
