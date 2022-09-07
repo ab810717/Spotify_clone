@@ -9,6 +9,7 @@ import Foundation
 protocol HomePageViewModelOutput: AnyObject {
     func updateUI()
     func loadingUI()
+    func showSuccessfulAddToPlaylistUI()
 }
 
 enum BrowseSectionType {
@@ -125,6 +126,14 @@ class HomePageViewModel {
             return RecommendedTrackCellViewModel(name: $0.name, artristName: $0.artists.first?.name ?? "" , artWorkURL: URL(string: $0.album?.images.first?.url ?? ""))
         })))
         self.delegate?.updateUI()
+    }
+    
+    func addTrackToPlaylist(track:AudioTrack, playlist: Playlist) {
+        APICaller.shared.addTarckToPlaylist(track: track, playlist: playlist) { success in
+            // Show alert view to let user know track has been added to playlist successfully!
+            print("Success: \(success)")
+            self.delegate?.showSuccessfulAddToPlaylistUI()
+        }
     }
     
 }

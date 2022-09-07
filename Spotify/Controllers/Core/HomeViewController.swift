@@ -36,6 +36,7 @@ class HomeViewController: UIViewController {
         view.addSubview(spinner)
         spinner.center(inView: view)
         fetchData()
+        addLongTapGesture()
     }
     
     override func viewDidLayoutSubviews() {
@@ -56,8 +57,13 @@ class HomeViewController: UIViewController {
         colletionView.delegate = self
     }
     
-    func fetchData() {
+    private func fetchData() {
         viewModel.fetchData()
+    }
+    
+    private func addLongTapGesture() {
+        let gesture = UILongPressGestureRecognizer(target: self, action: #selector(didLongPress(_:)))
+        colletionView.addGestureRecognizer(gesture)
     }
  
     // MARK: - Actions
@@ -66,6 +72,37 @@ class HomeViewController: UIViewController {
         let vc = SettingsViewController()
         vc.navigationItem.largeTitleDisplayMode = .never
         navigationController?.pushViewController(vc, animated: true)
+    }
+    
+    @objc func didLongPress(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began else {
+            return
+        }
+        
+        let touchPoint = gesture.location(in: colletionView)
+        // Recommanded songs's indexPath is 2
+        guard let indexPath = colletionView.indexPathForItem(at: touchPoint), indexPath.section == 2 else {
+            return
+        }
+        
+        let model = viewModel.tracks[indexPath.row]
+        
+        let actionSheet = UIAlertController(title: model.name, message: "Would you like to add this to playlist?", preferredStyle: .actionSheet)
+        actionSheet.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        actionSheet.addAction(UIAlertAction(title: "Add to playlist", style: .default, handler: {[weak self] _ in
+            // Choose which playlist you want to add
+            DispatchQueue.main.async {
+                let vc = LibraryPlaylistViewController()
+                vc.selectionHandler = { [weak self] playlist  in
+                    self?.viewModel.addTrackToPlaylist(track: model, playlist: playlist)
+                    
+                }
+                vc.title = "Select Playlist"
+                self?.present(UINavigationController(rootViewController: vc), animated: true, completion: nil)
+            }
+        }))
+        
+        present(actionSheet, animated: true)
     }
     
 }
@@ -270,5 +307,13 @@ extension HomeViewController:HomePageViewModelOutput {
     func updateUI() {
         self.spinner.isHidden = true
         self.colletionView.reloadData()
+    }
+    
+    func showSuccessfulAddToPlaylistUI() {
+        DispatchQueue.main.async {
+            let alert = UIAlertController(title: "Add to playlist", message: "Successfully added to playlist", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Ok", style: .cancel, handler: nil))
+            self.present(alert, animated: true)
+        }
     }
 }
