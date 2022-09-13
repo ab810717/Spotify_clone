@@ -80,8 +80,10 @@ class PlaylistViewController: UIViewController {
     }
     
     private func configureGesture() {
-        let gestrue = UILongPressGestureRecognizer(target: self, action: #selector(didLongPress(_:)))
-        collectionView.addGestureRecognizer(gestrue)
+        if isOwner {
+            let gestrue = UILongPressGestureRecognizer(target: self, action: #selector(didLongPress(_:)))
+            collectionView.addGestureRecognizer(gestrue)
+        }
     }
     
     private func fetchData() {

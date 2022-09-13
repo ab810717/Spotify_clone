@@ -42,6 +42,44 @@ final class APICaller {
         }
     }
     
+    public func getCurrentUserAlbums(completion: @escaping (Result<[Album], Error>) -> Void) {
+        createRequest(with: URL(string: Constansts.baseURL + "/me/albums/"), type: .GET) { request in
+            let task = URLSession.shared.dataTask(with: request) { data, _, error in
+                guard let data = data, error == nil else {
+                    completion(.failure(APIError.failedToGetData))
+                    return
+                }
+                do {
+                    let result = try JSONDecoder().decode(LibraryAlbumResponse.self, from: data)
+                    completion(.success(result.items.compactMap({$0.album})))
+                } catch {
+                    print("DEBUG: Could not get album details error: \(error.localizedDescription)")
+                    completion(.failure(APIError.failedToGetData))
+                }
+                
+            }
+            task.resume()
+        }
+    }
+    
+    public func saveAlbum(album: Album, completion: @escaping((Bool) -> Void))  {
+        createRequest(with: URL(string: Constansts.baseURL + "/me/albums?ids=\(album.id)"), type: .PUT) { baseRequest in
+            var request = baseRequest
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let json = ["ids: \(album.id)"]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: json, options: .fragmentsAllowed)
+            let task = URLSession.shared.dataTask(with: request) { _, response, error in
+                guard let code = (response as? HTTPURLResponse)?.statusCode, error == nil else {
+                    completion(false)
+                    return
+                }
+                print("DEBUG: current status code = \(code)")
+                completion(code == 200)
+            }
+            task.resume()
+        }
+    }
+    
     // MARK: - Get Playlists Detail
     
     public func getPlaylistsDetail(for playlist: Playlist, completion: @escaping (Result<PlaylistDetailsResponse,Error>) -> Void) {
@@ -158,6 +196,8 @@ final class APICaller {
     public func removeTrackFromPlaylist(track: AudioTrack, playlist: Playlist, completion: @escaping (Bool) -> Void) {
         createRequest(with: URL(string: Constansts.baseURL + "/playlists/\(playlist.id)/tracks"), type: .DELETE) { baseRequest in
             var request = baseRequest
+            print("track.id: \(track.id), playlist.id: \(playlist.id)")
+
             let json = [
                 "uris": ["spotify:track:\(track.id)"]
             ]
@@ -370,6 +410,7 @@ final class APICaller {
     enum HTTPMethod: String {
         case GET
         case POST
+        case PUT
         case DELETE
     }
     

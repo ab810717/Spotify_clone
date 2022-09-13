@@ -55,6 +55,7 @@ class AlbumViewController: UIViewController {
         viewModel.delegate = self
         configureUI()
         fetchData()
+        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .action, target: self, action: #selector(didTapActions))
     }
     
     override func viewDidLayoutSubviews() {
@@ -79,7 +80,22 @@ class AlbumViewController: UIViewController {
         viewModel.fetchData()
     }
     
+    func saveAlbum() {
+        viewModel.saveAlbum()
+    }
     
+    // MARK: - Actions
+    @objc private func didTapActions() {
+        let actionSheet = UIAlertController(title: album.name, message: "Actions", preferredStyle: .actionSheet)
+        actionSheet.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        actionSheet.addAction(UIAlertAction(title: "Save Album", style: .default, handler: {
+            [weak self] _ in
+            print("Save album!")
+            self?.saveAlbum()
+            // TODO: Call save album here!
+        }))
+        present(actionSheet,animated: true)
+    }
 }
 
 // MARK: - UICollectionViewDataSource & UICollectionViewDelegate
@@ -142,7 +158,7 @@ extension AlbumViewController:PlaylistHeaderCollectionReusableViewDelegate {
     }
 }
 
-// MARK:
+// MARK: AlbumViewViewModelOutput
 extension AlbumViewController:AlbumViewViewModelOutput {
     func updateUI() {
         self.collectionView.reloadData()

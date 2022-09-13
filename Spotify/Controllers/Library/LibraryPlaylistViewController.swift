@@ -122,14 +122,13 @@ extension LibraryPlaylistViewController: UITableViewDelegate, UITableViewDataSou
         }
         let vc = PlaylistViewController(playlist: playlist)
         vc.navigationItem.largeTitleDisplayMode = .never
-        vc.isOwner = true 
+        vc.isOwner = true
         navigationController?.pushViewController(vc, animated: true)
     }
 }
 
 // MARK: - LibraryPlaylistViewViewModelOutput
 extension LibraryPlaylistViewController:LibraryPlaylistViewViewModelOutput {
-    
     func updateUI() {
         print("DEBUG: update UI is invoked() " )
         if viewModel.playlists.isEmpty {

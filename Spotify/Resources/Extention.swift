@@ -149,3 +149,8 @@ extension String {
         return DateFormatter.displayDateFormatter.string(from: date)
     }
 }
+
+// MARK: - NotificationCenter
+extension Notification.Name {
+    static let albumSaveNotification = Notification.Name("albumSaveNotification")
+}

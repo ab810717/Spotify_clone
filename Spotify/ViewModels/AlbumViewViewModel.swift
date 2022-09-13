@@ -43,5 +43,13 @@ class AlbumViewViewModel {
         }
     }
     
+    func saveAlbum() {
+        APICaller.shared.saveAlbum(album: album) { success in
+            print("saveAlbum: \(success)")
+            if success {
+                NotificationCenter.default.post(name: .albumSaveNotification, object: nil)
+            }
+        }
+    }
     
 }
