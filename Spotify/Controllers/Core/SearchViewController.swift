@@ -110,6 +110,7 @@ extension SearchViewController: UICollectionViewDelegate, UICollectionViewDataSo
     }
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        HapticsManager.shared.vibrateForSelection()
         collectionView.deselectItem(at: indexPath, animated: true)
         let category = categories[indexPath.row]
         let vc = CategoryViewController(category: category)
@@ -135,7 +136,6 @@ extension SearchViewController:UISearchBarDelegate {
                 switch results {
                 case .success(let results):
                     resultController.update(with: results)
-//                    print("Get search result: \(results)")
                 case .failure(let error):
                     print("Get an error: \(error.localizedDescription)")
                 }

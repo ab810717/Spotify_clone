@@ -18,9 +18,11 @@ class LibraryAlbumsViewViewModel {
             DispatchQueue.main.async {
                 switch result {
                 case .success( let albums):
+                    HapticsManager.shared.vibrate(for: .success)
                     self.albums = albums
                     self.delegate?.updateUI()
                 case .failure(let error):
+                    HapticsManager.shared.vibrate(for: .error)
                     print(error)
                 }
             }

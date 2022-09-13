@@ -31,9 +31,11 @@ class LibraryPlaylistViewViewModel {
     func createPlaylist(with text:String) {
         APICaller.shared.createPlaylist(with: text) { success in
             if success {
+                HapticsManager.shared.vibrate(for: .success)
                 self.fetchData()
                 print("Create playlist successfully!")
             } else {
+                HapticsManager.shared.vibrate(for: .error)
                 print("Failed to create playlist")
             }
         }
