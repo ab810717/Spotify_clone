@@ -18,13 +18,11 @@ class AudioPlayer: NSObject {
     var tracks:[AudioTrack] = []
     var playerItems = [AVPlayerItem]() {
         didSet {
-            print("item was added", self.playerItems.count)
             if self.playerItems.count == 1 {
                 self.setupObservers()
             }
             if self.playerItems.count == self.tracks.count {
                 print("Completed, playerItems.count: \(playerItems.count)")
-//                self.setupObservers()
             }
         }
     }

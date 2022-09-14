@@ -64,7 +64,24 @@ class SettingsViewController: UIViewController {
     }
     
     private func signOutTapped() {
-        
+        let alert = UIAlertController(title: "Sign out", message: "Are you sure?", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        alert.addAction(UIAlertAction(title: "Sign out", style: .destructive, handler: { _ in
+            AuthManager.shared.signOut { [weak self] signedOut in
+                if signedOut {
+                    DispatchQueue.main.async {
+                        let navVC = UINavigationController(rootViewController: WelcomeViewController())
+                        navVC.navigationBar.prefersLargeTitles = true
+                        navVC.viewControllers.first?.navigationItem.largeTitleDisplayMode = .always
+                        navVC.modalPresentationStyle = .fullScreen
+                        self?.present(navVC, animated: true) {
+                            self?.navigationController?.popToRootViewController(animated: false)
+                        }
+                    }
+                }
+            }
+        }))
+        present(alert, animated: true)
     }
 }
 
