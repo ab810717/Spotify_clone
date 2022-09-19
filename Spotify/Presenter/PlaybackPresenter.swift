@@ -81,7 +81,7 @@ final class PlaybackPresenter{
         guard let audioPlayer = audioPlayer else {
             return
         }
-        audioPlayer.loadAVAsset(with: tracks)
+        audioPlayer.initialize(with: tracks)
     }
 }
 

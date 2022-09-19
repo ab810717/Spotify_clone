@@ -8,6 +8,7 @@
 import Foundation
 import AVFoundation
 import UIKit
+
 class AudioPlayer: NSObject {
     
     // MARK: - Properties
@@ -16,26 +17,35 @@ class AudioPlayer: NSObject {
         "volume": 5.0
     ]
     var tracks:[AudioTrack] = []
-    var playerItems = [AVPlayerItem]() {
+    var avPlayerItemPool = [AVPlayerItem]() {
         didSet {
-            if self.playerItems.count == 1 {
+            if self.avPlayerItemPool.count == 1 {
+                print("first player item has been added to avPlayerItemPool!")
                 self.setupObservers()
             }
-            if self.playerItems.count == self.tracks.count {
-                print("Completed, playerItems.count: \(playerItems.count)")
+            if self.avPlayerItemPool.count == self.tracks.count {
+                isReadyToPlayAllTracks = true
+                print("Completed, playerItems.count: \(avPlayerItemPool.count)")
             }
         }
     }
     
     var playingItemindex = 0
     var numberOfTracks:Int = 0
-    var isReady = false
+    var isReadyToPlayAllTracks = false
     
     let group = DispatchGroup()
     var asset: AVURLAsset? {
         didSet {
             guard let newAsset = asset else { return }
             asynchronouslyLoadURLAsset(newAsset, appendDirectly: false)
+        }
+    }
+    
+    var dynamicAsset: AVURLAsset? {
+        didSet {
+            guard let newDAsset = dynamicAsset else { return }
+            asynchronouslyLoadURLAsset(newDAsset, appendDirectly: true)
         }
     }
     
@@ -46,7 +56,12 @@ class AudioPlayer: NSObject {
     
     var audioQueueObserver: NSKeyValueObservation?
     var audioQueueStatusObserver: NSKeyValueObservation?
-    
+    var audioQueueBufferEmptyObserver: NSKeyValueObservation?
+    var audioQueueBufferAlmostThereObserver: NSKeyValueObservation?
+    var audioQueueBufferFullObserver: NSKeyValueObservation?
+    var audioQueueStallObserver: NSKeyValueObservation?
+    var audioQueueWaitingObserver: NSKeyValueObservation?
+    var assetPoolObserver: NSKeyValueObservation?
     // MARK: - Lifecycle
     deinit {
         /// Remove any KVO observer.
@@ -54,11 +69,12 @@ class AudioPlayer: NSObject {
         self.queuePlayer = nil
         self.audioQueueObserver?.invalidate()
         self.audioQueueStatusObserver?.invalidate()
+        self.audioQueueStallObserver?.invalidate()
     }
     
     // MARK: - Public functions
-    
-    func loadAVAsset(with tracks:[AudioTrack]) {
+    func initialize(with tracks:[AudioTrack]) {
+        // load assets as PlayerItems
         self.tracks = tracks
         self.numberOfTracks = tracks.count
         self.group.enter()
@@ -106,65 +122,56 @@ class AudioPlayer: NSObject {
         playTrack()
     }
     
+    func playAlltracks() {
+        self.queuePlayer = AVQueuePlayer(items: self.avPlayerItemPool)
+        self.queuePlayer?.play()
+    }
+    
     // MARK: - Private functions
     private func playTrack() {
-        if playerItems.count > 0 {
+        if avPlayerItemPool.count > 0 {
             print("Current playing index: \(playingItemindex)")
             self.queuePlayer?.removeAllItems()
-            self.queuePlayer?.replaceCurrentItem(with: playerItems[playingItemindex])
+            self.queuePlayer?.replaceCurrentItem(with: avPlayerItemPool[playingItemindex])
             self.queuePlayer?.play()
         }
     }
     
+    
     private func asynchronouslyLoadURLAsset(_ newAsset: AVURLAsset, appendDirectly:Bool = false) {
         /*
-         The asset invokes its completion handler on an arbitrary queue.
-         To avoid multiple threads using our internal state at the same time
-         we'll elect to use the main thread at all times, let's dispatch
-         our handler to the main queue.
+         Using AVAsset now runs the risk of blocking the current thread (the
+         main UI thread) whilst I/O happens to populate the properties. It's
+         prudent to defer our work until the properties we need have been loaded.
          */
         newAsset.loadValuesAsynchronously(forKeys: assetKeysRequiredToPlay) {
-            /*
-             The asset invokes its completion handler on an arbitrary queue.
-             To avoid multiple threads using our internal state at the same time
-             we'll elect to use the main thread at all times, let's dispatch
-             our handler to the main queue.
-             */
-            DispatchQueue.main.async {
-                for key in self.assetKeysRequiredToPlay {
-                    var error: NSError?
-                    if newAsset.statusOfValue(forKey: key, error: &error) == .failed {
-                        let stringFormat = NSLocalizedString("error.asset_key_%@_failed.description", comment: "Can't use this AVAsset because one of it's keys failed to load")
-                        let message = String.localizedStringWithFormat(stringFormat, key)
-                        self.handleErrorWithMessage(message, error: error)
-                        return
-                    }
-                }
-                
-                // We can't play this asset.
-                if !newAsset.isPlayable || newAsset.hasProtectedContent {
-                    let message = NSLocalizedString("error.asset_not_playable.description", comment: "Can't use this AVAsset because it isn't playable or has protected content")
-                    self.handleErrorWithMessage(message)
-                    return
-                }
-                
+            var error: NSError?
+            let status = newAsset.statusOfValue(forKey: self.assetKeysRequiredToPlay[0], error: &error)
+            switch status {
+            case .unknown:
+                print("unknown status")
+            case .loading:
+                print("newAsset is loading..")
+            case .loaded:
+                print("Sucessfully loaded. Continue processing.")
                 /*
-                 We can play this asset. Create a new `AVPlayerItem` and make
-                 it our player's current item.
+                 The asset invokes its completion handler on an arbitrary queue.
+                 To avoid multiple threads using our internal state at the same time
+                 we'll elect to use the main thread at all times, let's dispatch
+                 our handler to the main queue.
                  */
-                if appendDirectly == false {
+                DispatchQueue.main.async {
+                    let avPlayerItem = AVPlayerItem(asset: newAsset)
+                    self.avPlayerItemPool.append(avPlayerItem)
                     print("DEBUG: append aseet to playerItems!")
-                    self.playerItems.append(AVPlayerItem(asset: newAsset))
+                    self.group.leave()
                 }
-                else {
-                    print("trying to add: ", newAsset.url)
-                    self.playerItems.append(AVPlayerItem(asset: newAsset))
-                    if self.queuePlayer?.canInsert(AVPlayerItem(asset: newAsset), after: self.queuePlayer?.items().last) == true {
-                        self.queuePlayer?.insert(AVPlayerItem(asset: newAsset), after: self.queuePlayer?.items().last)
-                    }
-                    
-                }
-                self.group.leave()
+            case .failed:
+                print("Failed to laod asset, need to handle error!")
+            case .cancelled:
+                print("cancelled")
+            @unknown default:
+                print("unknow status!")
             }
         }
     }
@@ -172,12 +179,31 @@ class AudioPlayer: NSObject {
     
     private func setupObservers() {
         print("setupObservers")
-        self.queuePlayer = AVQueuePlayer(items: self.playerItems)
+        self.queuePlayer = AVQueuePlayer(items: self.avPlayerItemPool)
         self.queuePlayer?.usesExternalPlaybackWhileExternalScreenIsActive = true
         self.audioQueueObserver = self.queuePlayer?.observe(\.currentItem, options: [.new], changeHandler: {  [weak self] (player, _) in
             guard let self = self else { return }
-            print("media item changed..., current Index: \(self.playingItemindex)")
+            print("media item changed..., current Index: playing item index: \(self.playingItemindex), curretn index: \(player.currentItem)")
+            
         })
+        
+//        self.audioQueueStallObserver = self.queuePlayer?.observe(\.timeControlStatus, changeHandler: { (playerItem, change) in
+//            switch playerItem.timeControlStatus {
+//            case .paused:
+//                print("paused")
+//            case .waitingToPlayAtSpecifiedRate:
+//                print("waitingToPlayAtSpecifiedRate")
+//            case .playing:
+//                print("playing")
+//            default:
+//                print("No change")
+//            }
+//
+//        })
+        
+   
+        
+        
         self.queuePlayer?.play()
     }
     
