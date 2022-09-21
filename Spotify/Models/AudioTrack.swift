@@ -33,3 +33,19 @@ struct AudioTrack: Codable {
         case previewURL = "preview_url"
     }
 }
+
+extension AudioTrack {
+    init(with prewviewURL: String) {
+        self.album = nil
+        self.artists = []
+        self.availableMarkets = []
+        self.discNumber = 0
+        self.durationMs = 0
+        self.explicit = false
+        self.externalUrls = [:]
+        self.id = ""
+        self.name = ""
+        self.popularity = 0
+        self.previewURL = prewviewURL
+    }
+}

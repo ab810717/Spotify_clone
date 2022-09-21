@@ -9,6 +9,12 @@ import Foundation
 import AVFoundation
 import UIKit
 
+enum LoadAssertError: Error {
+    case failedToLoad
+    case cancelled
+    case unknown
+}
+
 class AudioPlayer: NSObject {
     
     // MARK: - Properties
@@ -16,6 +22,7 @@ class AudioPlayer: NSObject {
         "loop": false,
         "volume": 5.0
     ]
+    
     var tracks:[AudioTrack] = []
     var avPlayerItemPool = [AVPlayerItem]() {
         didSet {
@@ -33,71 +40,84 @@ class AudioPlayer: NSObject {
     var playingItemindex = 0
     var numberOfTracks:Int = 0
     var isReadyToPlayAllTracks = false
-    
     let group = DispatchGroup()
-    var asset: AVURLAsset? {
+    var urlAsset: AVURLAsset? {
         didSet {
-            guard let newAsset = asset else { return }
-            asynchronouslyLoadURLAsset(newAsset, appendDirectly: false)
+            guard urlAsset != nil else { return }
+            print("urlAsset has been set!")
         }
     }
-    
-    var dynamicAsset: AVURLAsset? {
-        didSet {
-            guard let newDAsset = dynamicAsset else { return }
-            asynchronouslyLoadURLAsset(newDAsset, appendDirectly: true)
-        }
-    }
-    
     let assetKeysRequiredToPlay = ["playable"]
     let assetQueue = DispatchQueue(label: "randomQueue", qos: .utility)
     var queuePlayer: AVQueuePlayer?
     var playerVC: PlayerViewController?
-    
     var audioQueueObserver: NSKeyValueObservation?
-    var audioQueueStatusObserver: NSKeyValueObservation?
-    var audioQueueBufferEmptyObserver: NSKeyValueObservation?
-    var audioQueueBufferAlmostThereObserver: NSKeyValueObservation?
-    var audioQueueBufferFullObserver: NSKeyValueObservation?
-    var audioQueueStallObserver: NSKeyValueObservation?
-    var audioQueueWaitingObserver: NSKeyValueObservation?
-    var assetPoolObserver: NSKeyValueObservation?
     // MARK: - Lifecycle
+    
+    init(tracks:[AudioTrack]) {
+        self.tracks = tracks
+        self.numberOfTracks = tracks.count
+    }
+    
     deinit {
         /// Remove any KVO observer.
         print("DEINIT: Remove any KVO observer.")
         self.queuePlayer = nil
         self.audioQueueObserver?.invalidate()
-        self.audioQueueStatusObserver?.invalidate()
-        self.audioQueueStallObserver?.invalidate()
     }
     
     // MARK: - Public functions
-    func initialize(with tracks:[AudioTrack]) {
-        // load assets as PlayerItems
+    func loadTracksAndConverToPlayerItems(with tracks:[AudioTrack], completion:@escaping(Result<[PlaylistItem], Error>) -> Void) {
         self.tracks = tracks
-        self.numberOfTracks = tracks.count
-        self.group.enter()
-        var counter = 0
+        
         for track in tracks {
-            if counter > 0 {
+            if let url = URL(string: track.previewURL ?? "https://p.scdn.co/mp3-preview/b8730e38f19e5f8dbd5ed0349af227d696958000?cid=56129e9c39744aa09f73de36f1e56c87") {
                 self.assetQueue.async {
-                    self.group.wait()
+                    self.urlAsset = AVURLAsset(url: url)
                     self.group.enter()
-                    if let url = URL(string: track.previewURL ?? "https://p.scdn.co/mp3-preview/b8730e38f19e5f8dbd5ed0349af227d696958000?cid=56129e9c39744aa09f73de36f1e56c87") {
-                        self.asset = AVURLAsset(url: url)
+                    self.convertAVAssetToPlayerItem(asset: self.urlAsset!) {[weak self] result in
+                        guard let self = self else { return }
+                        switch result {
+                        case .success(let avPlayerItem):
+                            print("Get avPlayerItem: \(avPlayerItem.description)")
+                            DispatchQueue.main.async {
+                                print("Append to avPlayerIem")
+                                self.avPlayerItemPool.append(avPlayerItem)
+                                self.group.leave()
+                            }
+                        case .failure(let error):
+                            print("DEBUGT: Get an error: \(error)")
+                        }
                     }
-                }
-            } else {
-                self.assetQueue.async {
-                    if let url = URL(string: track.previewURL ?? "") {
-                        self.asset = AVURLAsset(url: url)
-                    }
+                    self.group.wait()
                 }
             }
-            counter += 1
         }
         
+    }
+    
+    func convertAVAssetToPlayerItem(asset: AVURLAsset, compltion: @escaping (Result<AVPlayerItem, Error>) -> Void) {
+        asset.loadValuesAsynchronously(forKeys: self.assetKeysRequiredToPlay) {
+            var error:NSError? = nil
+            switch asset.statusOfValue(forKey: self.assetKeysRequiredToPlay[0], error: &error) {
+            case .unknown:
+                compltion(.failure(LoadAssertError.unknown))
+            case .loading:
+                print("loading")
+            case .loaded:
+                // convert it to AVPlayerItem
+                print("DEBUG: Loaded!")
+                let avPlayerItem = AVPlayerItem(asset: asset)
+                compltion(.success(avPlayerItem))
+            case .failed:
+                print("failed, need to handle error here!")
+                compltion(.failure(LoadAssertError.failedToLoad))
+            case .cancelled:
+                compltion(.failure(LoadAssertError.cancelled))
+            @unknown default:
+                print("unknown")
+            }
+        }
     }
     
     func changeVolume(_ value: Float) {
@@ -105,6 +125,10 @@ class AudioPlayer: NSObject {
     }
     
     func playFoward() {
+        guard playingItemindex < self.numberOfTracks else {
+            print("DEBUG: INVALID Operation: playingItemindex: \(playingItemindex) / \(numberOfTracks)")
+            return
+        }
         if playingItemindex == numberOfTracks - 1 {
             playingItemindex = numberOfTracks - 1
         } else {
@@ -129,6 +153,7 @@ class AudioPlayer: NSObject {
     
     // MARK: - Private functions
     private func playTrack() {
+        guard playingItemindex < avPlayerItemPool.count else { return }
         if avPlayerItemPool.count > 0 {
             print("Current playing index: \(playingItemindex)")
             self.queuePlayer?.removeAllItems()
@@ -138,44 +163,6 @@ class AudioPlayer: NSObject {
     }
     
     
-    private func asynchronouslyLoadURLAsset(_ newAsset: AVURLAsset, appendDirectly:Bool = false) {
-        /*
-         Using AVAsset now runs the risk of blocking the current thread (the
-         main UI thread) whilst I/O happens to populate the properties. It's
-         prudent to defer our work until the properties we need have been loaded.
-         */
-        newAsset.loadValuesAsynchronously(forKeys: assetKeysRequiredToPlay) {
-            var error: NSError?
-            let status = newAsset.statusOfValue(forKey: self.assetKeysRequiredToPlay[0], error: &error)
-            switch status {
-            case .unknown:
-                print("unknown status")
-            case .loading:
-                print("newAsset is loading..")
-            case .loaded:
-                print("Sucessfully loaded. Continue processing.")
-                /*
-                 The asset invokes its completion handler on an arbitrary queue.
-                 To avoid multiple threads using our internal state at the same time
-                 we'll elect to use the main thread at all times, let's dispatch
-                 our handler to the main queue.
-                 */
-                DispatchQueue.main.async {
-                    let avPlayerItem = AVPlayerItem(asset: newAsset)
-                    self.avPlayerItemPool.append(avPlayerItem)
-                    print("DEBUG: append aseet to playerItems!")
-                    self.group.leave()
-                }
-            case .failed:
-                print("Failed to laod asset, need to handle error!")
-            case .cancelled:
-                print("cancelled")
-            @unknown default:
-                print("unknow status!")
-            }
-        }
-    }
-    
     
     private func setupObservers() {
         print("setupObservers")
@@ -183,27 +170,9 @@ class AudioPlayer: NSObject {
         self.queuePlayer?.usesExternalPlaybackWhileExternalScreenIsActive = true
         self.audioQueueObserver = self.queuePlayer?.observe(\.currentItem, options: [.new], changeHandler: {  [weak self] (player, _) in
             guard let self = self else { return }
-            print("media item changed..., current Index: playing item index: \(self.playingItemindex), curretn index: \(player.currentItem)")
+            print("media item changed..., current Index: playing item index: \(self.playingItemindex)")
             
         })
-        
-//        self.audioQueueStallObserver = self.queuePlayer?.observe(\.timeControlStatus, changeHandler: { (playerItem, change) in
-//            switch playerItem.timeControlStatus {
-//            case .paused:
-//                print("paused")
-//            case .waitingToPlayAtSpecifiedRate:
-//                print("waitingToPlayAtSpecifiedRate")
-//            case .playing:
-//                print("playing")
-//            default:
-//                print("No change")
-//            }
-//
-//        })
-        
-   
-        
-        
         self.queuePlayer?.play()
     }
     

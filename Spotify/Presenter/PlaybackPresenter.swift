@@ -60,12 +60,9 @@ final class PlaybackPresenter{
     
     func startPlayback(from viewController: UIViewController, tracks: [AudioTrack]) {
         playingItemindex = 0
-        self.audioPlayer = AudioPlayer()
-        self.tracks = []
         self.tracks = tracks
+        self.audioPlayer = AudioPlayer(tracks: tracks)
         self.numberOfTracks = tracks.count
-        print("DEBUG: Get tracks.count: \(tracks.count)")
-        self.track = nil
         loadAsset(with: tracks)
         
         let vc = PlayerViewController()
@@ -81,7 +78,14 @@ final class PlaybackPresenter{
         guard let audioPlayer = audioPlayer else {
             return
         }
-        audioPlayer.initialize(with: tracks)
+        audioPlayer.loadTracksAndConverToPlayerItems(with: tracks) { result in
+            switch result {
+            case .success(let playerItems):
+                print("DEBUG: playerItems.count: \(playerItems.count)")
+            case .failure(let error):
+                print("DEBUG: Get an error: \(error.localizedDescription)")
+            }
+        }
     }
 }
 
