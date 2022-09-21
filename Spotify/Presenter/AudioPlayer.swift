@@ -28,7 +28,9 @@ class AudioPlayer: NSObject {
         didSet {
             if self.avPlayerItemPool.count == 1 {
                 print("first player item has been added to avPlayerItemPool!")
-                self.setupObservers()
+                if !isTestEnv {
+                    self.setupObservers()
+                }
             }
             if self.avPlayerItemPool.count == self.tracks.count {
                 isReadyToPlayAllTracks = true
@@ -36,7 +38,7 @@ class AudioPlayer: NSObject {
             }
         }
     }
-    
+    var isTestEnv = false
     var playingItemindex = 0
     var numberOfTracks:Int = 0
     var isReadyToPlayAllTracks = false
@@ -67,7 +69,7 @@ class AudioPlayer: NSObject {
     }
     
     // MARK: - Public functions
-    func loadTracksAndConverToPlayerItems(with tracks:[AudioTrack], completion:@escaping(Result<[PlaylistItem], Error>) -> Void) {
+    func loadTracksAndConverToPlayerItems(with tracks:[AudioTrack], completion:@escaping(Result<[AVPlayerItem], Error>) -> Void) {
         self.tracks = tracks
         
         for track in tracks {
@@ -84,15 +86,21 @@ class AudioPlayer: NSObject {
                                 print("Append to avPlayerIem")
                                 self.avPlayerItemPool.append(avPlayerItem)
                                 self.group.leave()
+                                if self.avPlayerItemPool.count == self.numberOfTracks {
+                                    print("All url have been convert to player item: \(self.avPlayerItemPool.count)")
+                                    completion(.success(self.avPlayerItemPool))
+                                }
                             }
                         case .failure(let error):
                             print("DEBUGT: Get an error: \(error)")
+                            completion(.failure(error))
                         }
                     }
                     self.group.wait()
                 }
             }
         }
+        
         
     }
     

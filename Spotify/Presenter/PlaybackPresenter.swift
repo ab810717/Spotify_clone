@@ -81,7 +81,7 @@ final class PlaybackPresenter{
         audioPlayer.loadTracksAndConverToPlayerItems(with: tracks) { result in
             switch result {
             case .success(let playerItems):
-                print("DEBUG: playerItems.count: \(playerItems.count)")
+                print("DEBUG: Check playerItems.count: \(playerItems.count)")
             case .failure(let error):
                 print("DEBUG: Get an error: \(error.localizedDescription)")
             }
